@@ -76,5 +76,11 @@
         "xtree": "cpp",
         "xutility": "cpp",
         "__locale": "cpp"
-    }
+    },
+    "cSpell.ignoreWords": [
+        "tallec"
+    ],
+    "cSpell.words": [
+        "markdownlint"
+    ]
 }
