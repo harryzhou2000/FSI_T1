@@ -56,7 +56,7 @@ by harryzhou2000 @
 ## Basic Purpose
 
 &emsp;FSI_T1 is basically a c++ (with some template) library providing multiple classes, which enables you to assemble from them a custom
-<kbd style="color:white;background-color:#1F2F6F;font-family:arial;">**[Fluid](#fluid)**</kbd>,&nbsp;
+<kbd style="color:white;background-color:#1F5FCF;font-family:arial;">**[Fluid](#fluid)**</kbd>,&nbsp;
 <kbd style="color:white;background-color:#ff9900;font-family:arial;">**[Structural](#structural)**</kbd>
 &nbsp;or&nbsp;
 <kbd style="color:white;background-color:#00cc99;font-family:arial;">**[FSI](#fsi)**</kbd> computation case. Fluid part currently supports only Euler equation, which represents adiabatic and inviscid compressible ideal gas dynamics. Solid part currently supports linear elastic mechanics, including statics and modal-truncation method dynamics. FSI part, correspondingly, is basically meant for moderate structural displacement, typically aeroelastic cases.
@@ -145,7 +145,7 @@ $$
     \end{bmatrix}
   \right)d\Gamma
 }
-+\int_{\partial{\Omega(t)}}
+\\+\int_{\partial{\Omega(t)}}
 {
   \rho \left(
      u_x^* n_x + u_y^* n_y + u_z^* n_z
