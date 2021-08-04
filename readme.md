@@ -38,6 +38,10 @@ Note:
   - [FSI Methods](#fsi-methods)
 - [A Brief Guide To Using This Code](#a-brief-guide-to-using-this-code)
   - [Implementation Framework](#implementation-framework)
+    - [Unstructured Meshes](#unstructured-meshes)
+    - [FEM Solver](#fem-solver)
+    - [FVM Solver](#fvm-solver)
+    - [Coupling Solver](#coupling-solver)
   - [Classes](#classes)
     - [Fluid](#fluid)
     - [Structural](#structural)
@@ -165,8 +169,7 @@ $$
 
 &emsp;Thus if using $\boldsymbol{u^*}$ as speed, the flux could be approximated with a common approximate Riemann solver when the approximate field is not $C^0$. Other items could be handled rather simply.
 
-&emsp;Finite volume spacial discretion is adopted(FVM). This program uses Roe's approximate Riemann solver[[2]](#ref2), which is modified with entropy fix of Harten-Yee[[3]](#ref3) for numerical flux. This program conducts 2nd-order
-reconstruction with Barth-Jesperson limiter[[4]](#ref4).
+&emsp;Finite volume spacial discretion is adopted(FVM). This program uses Roe's approximate Riemann solver[[2]](#ref2), which is modified with entropy fix of Harten-Yee[[3]](#ref3) for numerical flux. This program conducts 2nd-order reconstruction with Barth-Jesperson limiter[[4]](#ref4).
 
 &emsp;The boundary conditions are built basically in the form of virtual cells. Slip-wall boundary and non-reflecting boundary are implemented. A pressure inlet/outlet boundary is also implemented , but its robustness is yet to be improved.
 
@@ -192,7 +195,7 @@ $$
 
 &emsp;Where $N^e$ is a row vector of shape functions(interpolating functions)on the nodes in the finite element, and $B^e$ is a matrix representing linear contributions of the nodal DOFs to the strain field(which has 6 rows if using symmetric 3-D strain tensor, and DOF columns corresponding to DOFs). $\rho$ is just density field, and $f$ , $p$ , are external forces of volume and surface.
 
-&emsp;In this project, currently only 4-node tetrahedra elements are implemented, which means both integrations in faces or volumes only need one interpolation point. If higher order elements are to be used, the interpolation method should be accurate enough.
+&emsp;In this project, currently only 4-node tetrahedra elements are implemented, which means both integrals in faces or volumes only need one interpolation point. If higher order elements are to be used, the interpolation method should be accurate enough.
 
 &emsp;A static solver can be found in the program, with LDL decomposition method or PCG method. For FSI purpose, a modal-truncation dynamic solver is implemented. Ignoring matrix $C$ at first, then using a eigen problem:
 
@@ -240,7 +243,7 @@ $$
 
 &emsp;The FSI in this project is based on a simple explicit coupling method. The external force for structural model is obtained from the flow in the last coupling time step, and the flow obtains the moving mesh and interface from the structural movement in the last couping time step. If a general implicit method is to be expressed, the condition connecting both problems is the coordinated interface movement and passage of force on the interface, which defines where the overall system should converge. As this project only considers transient problem, only using a explicit method is acceptable.
 
-&emsp;Due to some problems in my meshing technique, the fluid and structural meshes don;t adapt perfectly on the interface, but their mesh densities are similar. So when passing force and displacement, this project conducts simple interpolations between the surfaces(with KNN search). It should be noted that this is a common problem in more complex meshing(such as rotating meshes or overlapping grids), so there must be some better and more robust techniques to perform the interpolation than this project's implementation.
+&emsp;Due to some problems in my meshing technique, the fluid and structural meshes don't adapt perfectly on the interface, but their mesh densities are similar. So when passing force and displacement, this project conducts simple interpolations between the surfaces(with KNN search). It should be noted that this is a common problem in more complex meshing(such as rotating meshes or overlapping grids), so there must be some better and more robust techniques to perform the interpolation than this project's implementation.
 
 &emsp;The last problem in FSI is to move the fluid mesh correctly. There are many interpolating methods that moves the mesh well, but this project uses a much simpler but rather time-consuming way. If you view the fluid part as a solid body, and apply displacement boundary conditions on all its outer faces, when the interface moves, the fluid mesh moves correspondingly. When the interface is attached, the movements inside the mesh is also almost continuous. The only problem that arises is that 'stress' distribution in the fluid mesh could be singular around some points of the interface, and is mostly concentrated near the interface. Under the assumption of linear structural response, the elements near the interface are likely to be overlapped or distorted. A simple way of solving this is to set higher value of modulus near the interface, forcing the strain to distribute farther from the interface. Also, setting higher shearing modulus could help abating the distortion.
 
@@ -248,9 +251,25 @@ $$
 
 <br/><br/>
 
-# A Brief Guide To Using This Code<!--TODO-->
+# A Brief Guide To Using This Code
 
 ## Implementation Framework
+
+### Unstructured Meshes
+
+&emsp;A good representation of the topology of an unstructured mesh, would be a diagram representing hierarchical connectivity between layers of mesh elements, which is frequently referred to as a *Hasse diagram*. For example, layers could be **vertices** $\rArr$ **edges** $\rArr$ **faces** $\rArr$ **volumes** for a 3-D mesh, while in some certain problems, some intermediary layers could be omitted. The diagram is essentially a DAG whose nodes represent mesh elements. Therefore, the corresponding data structure would be basically a sparse adjacency matrix, or separate matrices between levels of layers. With this kind of information, one can easily find out, for example, the set of vertices sharing edge, face or element with a known vertex, or the set of volumes sharing common faces or nodes with a known volume. These queries naturally take $O(1)$ time with the help of the Hasse diagram.
+
+&emsp;Normally, the geometry of a mesh is represented as known coordinates of vertices.
+
+&emsp;When I started this project, it was actually based on some previous work with some rather dumb coding. From the view of a Hasse diagram, my unstructured mesh is only representing relations between volumes and vertices, which is alright with FEM coding, for neither volume and surface integrals nor nodal average in FEM need any more information. In 2nd order FEM, neighboring cells are need, for DOFs are stored with volumes and their adjacency is the same as cellular adjacency. I did not upgrade my data structure to represent one more layer (the face layer), but only added a neighbor searching procedure to the mesh loading method. Apparently, this kind of technique prevents direct extension to higher-order FVM with large stencils. Also, the adjacency representation is not generic, which only supports tetrahedral volumes(cells) with only 4 vertices, which hinders further implementation of higher-order nodal FEM. 
+
+&emsp;In namespace **MeshBasic**, class **gridNeighbour** is defined, which records information about neighboring cells for a single cell, including some precalculated geometric values. Mean, class **TetraNodes** is also defined here to store actual volume to vertices info for a single cell, along with some precalculated geometric information. In the same namespace, I defined class **TetraMesh**, which is a general mesh holder. TetraMesh is able to load meshes and precalculate necessary topological and geometric information (which is primarily for FVM).
+
+### FEM Solver <!--TODO-->
+
+### FVM Solver
+
+### Coupling Solver
 
 ## Classes
 
