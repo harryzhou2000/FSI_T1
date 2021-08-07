@@ -46,7 +46,7 @@ Note:
     - [Fluid](#fluid)
     - [Structural](#structural)
     - [FSI](#fsi)
-  - [Input File Convention](#input-file-convention)
+  - [I/O File Convention](#io-file-convention)
 - [Case Building](#case-building)
 - [Compiling](#compiling)
   - [Make](#make)
@@ -261,11 +261,29 @@ $$
 
 &emsp;Normally, the geometry of a mesh is represented as known coordinates of vertices.
 
-&emsp;When I started this project, it was actually based on some previous work with some rather dumb coding. From the view of a Hasse diagram, my unstructured mesh is only representing relations between volumes and vertices, which is alright with FEM coding, for neither volume and surface integrals nor nodal average in FEM need any more information. In 2nd order FEM, neighboring cells are need, for DOFs are stored with volumes and their adjacency is the same as cellular adjacency. I did not upgrade my data structure to represent one more layer (the face layer), but only added a neighbor searching procedure to the mesh loading method. Apparently, this kind of technique prevents direct extension to higher-order FVM with large stencils. Also, the adjacency representation is not generic, which only supports tetrahedral volumes(cells) with only 4 vertices, which hinders further implementation of higher-order nodal FEM. 
+&emsp;When I started this project, it was actually based on some previous work with some rather dumb coding. From the view of a Hasse diagram, my unstructured mesh is only representing relations between volumes and vertices, which is alright with FEM coding, for neither volume and surface integrals nor nodal average in FEM need any more information. In 2nd order FEM, neighboring cells are need, for DOFs are stored with volumes and their adjacency is the same as cellular adjacency. I did not upgrade my data structure to represent one more layer (the face layer), but only added a neighbor searching procedure to the mesh loading method. Apparently, this kind of technique prevents direct extension to higher-order FVM with large stencils. Also, the adjacency representation is not generic, which only supports tetrahedral volumes(cells) with only 4 vertices, which hinders further implementation of higher-order nodal FEM.
 
 &emsp;In namespace **MeshBasic**, class **gridNeighbour** is defined, which records information about neighboring cells for a single cell, including some precalculated geometric values. Mean, class **TetraNodes** is also defined here to store actual volume to vertices info for a single cell, along with some precalculated geometric information. In the same namespace, I defined class **TetraMesh**, which is a general mesh holder. TetraMesh is able to load meshes and precalculate necessary topological and geometric information (which is primarily for FVM).
 
-### FEM Solver <!--TODO-->
+&emsp;I've established some understandings of unstructured mesh, those are recorded below and irrelevant with the current project.
+
+&emsp;As I truly know little about unstructured mesh management and related data structures, I can only make some assumptions on a nearly 'perfect' implementation of an unstructured mesh framework. This framework should be able to represent a general mesh topology, irrelevant with mesh type, node distribution and dimension. More importantly, the framework should provide methods of obtaining adjacent mesh elements with constant time complexity (with degrees of the graph limited). Also, the frame work should allow users to attach arbitrary form of data onto mesh elements, to represent scalar, vector or tensor field within the mesh geometry, on vertices, faces or volumes. Meanwhile, the framework should enable users to abstract these fields into global vectors and tensors, in cooperation with global discrete operators like sparse matrices. Of course, process-scale parallel is a must, most probably implemented with MPI framework. Thread parallelism and CUDA support are also needed, but message distributing and communication are still the most complicated part of the program.
+
+### FEM Solver
+
+&emsp;In conventional finite-element method, or a common Galerkin method, the trial functions, being identical with the bases of the discrete solution, are considered to be $C^0$. Therefore the piecewise defined polynomial bases should maintain $C^0$ continuity on the interfaces of volumes (take 3-D for example). As a result, it is better to consider the discrete DOFs to be set on the vertices, and the bases are interpolation functions that satisfy a kronecker-delta property over the vertices. For this certain project, each volume is a tetrahedron with 4 vertices, and you can easily transform it linearly into a corner of a cartesian box, and using 3 cartesian axes you can easily define first-order bases functions for each vertex. Generally, the basis functions are defined in a normalized coordinate system as polynomials. As the transformation between the normalized space and the geometric space is generally not a linear mapping (basically as curved elements), generally the same set of basis functions are used to interpolate the mapping. Fundamentally, the actual bases are fractions rather than polynomials, but as flat-faced and near flat-faced elements are the majority, the orders of polynomial-based numerical integral are mostly decided with the situation of a linear spacial mapping.
+
+&emsp;Sadly, in this program you may find no actual numerical integral process, as the variable to integrate are derived form first derivatives of the bases, and they are actually constant in the volumes for linear bases. The only extra value to calculate for each volume is the determinant of the first partial derivatives (or Jacobian matrix) of the spacial mapping (which is also constant in the volume). The determinant is precisely the volume of the tetrahedron.
+
+&emsp;When discussing a linear elastic static problem, all should be calculated are the discrete linear operator (or stiffness matrix) and the load vector. Using some linear algebra techniques, the program first integrates a local matrix and a local load vector for each volume, and adds them to the global matrix and global load vector. This program applies triplet structure to the sparse matrix, by adding random entries first and doing a sort on the indices in the end, it needs $O(N logN)$ time for assembly (mainly for sorting). Certainly, taking advantage of the (at least temporarily) static feature of mesh, a preallocation procedure could be added and one can easily build the matrix in CSR form. The CSR preallocation-and-fill paradigm takes $O(N log(Degree))$ time, where Degree denotes an average number of non-zeros in a row. This latter kind of implementation cannot be found in the project for it's a few times more complicated.
+
+&emsp;There are some other problems concerning boundary conditions, which are small modifications in the procedures above (although actually the load vector's non-zero entries are mainly caused by the boundary conditions) concerning reducing DOFs or boundary integration.
+
+&emsp;When the matrix and vector are produced, the only matters are to solve them. For a time-dependent problem, you need to derive a proper time discretion scheme; for a non-linear problem, you need to update the stiffness matrix at certain times. Nonetheless, the core problem here is to solve the linear system. I just threw them to Eigen's internal template implementation (While being a C++ template library, Eigen is also a great C++ interface and it supports wrapping of various external solvers). For a elliptic problem here with Galerkin discretion, matrices are mostly positive-definite and symmetric, so PCG would be rather favorable. When the problem is not too large, direct methods like LDU decomposition could also be viable (which is extremely helpful in eigenvalue problems for they require a lot of re-solving the matrix). Concerning the sparse eigenvalue problem (for modal analysis in FSI), I simply applied inverse power method, which seems to have some problems in high-rank mode convergence. Should consider switching to some more advanced techniques or just use a well-proven library.
+
+&emsp;The global vectors are represented as std::vector\<T\>, for I only apply shared-memory parallelism. All the matrix-related data structures and algorithms are in namespace **SparseMat**, and the **SparseMatGeR** class with relevant solving functions inside. **SolidMaterial** namespace and **ElasSet** class defines some general constitutional properties for the elastic problem. In **FEM** namespace class **FemT4Solver** is defined, which is derived from the **TetraMesh** class (which I now think should become a member rather than father... but inheritance means all the complex data in TetraMesh could be written the same way in TetraMesh member functions...). The **FemT4Solver** class, with **TetraMesh**, imports and manages mesh and problem definition, and assembles the stiffness matrix along with load vector, and provide interface to solve and output.
+
+<!--TODO-->
 
 ### FVM Solver
 
@@ -279,7 +297,7 @@ $$
 
 ### FSI
 
-## Input File Convention
+## I/O File Convention
 
 <br/><br/>
 
