@@ -37,7 +37,7 @@ Note:
   - [Structural Methods](#structural-methods)
   - [FSI Methods](#fsi-methods)
 - [A Brief Guide To Using This Code](#a-brief-guide-to-using-this-code)
-  - [Implementation Framework](#implementation-framework)
+  - [Implementation and Framework](#implementation-and-framework)
     - [Unstructured Meshes](#unstructured-meshes)
     - [FEM Solver](#fem-solver)
     - [FVM Solver](#fvm-solver)
@@ -253,7 +253,7 @@ $$
 
 # A Brief Guide To Using This Code
 
-## Implementation Framework
+## Implementation and Framework
 
 ### Unstructured Meshes
 
@@ -283,11 +283,21 @@ $$
 
 &emsp;The global vectors are represented as std::vector\<T\>, for I only apply shared-memory parallelism. All the matrix-related data structures and algorithms are in namespace **SparseMat**, and the **SparseMatGeR** class with relevant solving functions inside. **SolidMaterial** namespace and **ElasSet** class defines some general constitutional properties for the elastic problem. In **FEM** namespace class **FemT4Solver** is defined, which is derived from the **TetraMesh** class (which I now think should become a member rather than father... but inheritance means all the complex data in TetraMesh could be written the same way in TetraMesh member functions...). The **FemT4Solver** class, with **TetraMesh**, imports and manages mesh and problem definition, and assembles the stiffness matrix along with load vector, and provide interface to solve and output.
 
-<!--TODO-->
-
 ### FVM Solver
 
-### Coupling Solver
+&emsp;Different from FEM, in finite volume method, conventionally the dofs are stored in each volume (and one copy per dof in each volume), which means when representing the distribution of a scalar in the volume, you need to refer to information from other volumes to obtain a polynomial with a order higher than zero. The program only implements a reconstruction of order one, representing the field with piecewise linear functions, for only neighboring volumes are needed. The variables may have discontinuities in the solution, like shock waves for example. A simple linear mapping from discrete DOFs to the reconstructed field definitely generates spurious oscillation near a discontinuity, with an approximation order higher than zero. Therefore a non-linear limiting method is necessary to help the reconstruction remain normal near a discontinuity. This program uses a simple Barth-Jesperson limiter in [[4]](#ref4).
+
+&emsp;A typical FVM procedure first reconstructs a distribution in the volumes, where values on the volume interfaces are not necessarily the same, then numerical fluxes on the interfaces are calculated. A well-known and widely used method of calculating the hyperbolic part of the flux is using an local riemann solver which is mostly rather approximate. With a symmetric way of calculating the hyperbolic flux, generally negative numerical dissipation causes the discrete system to be unstable, while a more 'upwind' flux is often favorable with enough stability while dissipation and dispersion are acceptable. The local riemann solvers provide the only 'upwind' property of a FVM method for hyperbolic PDEs, for the reconstruction procedure does not know the convection direction (or the characteristic lines) and remains central. Without a upwind flux, artificial viscosity would be necessary to save the stability.
+
+&emsp;A first widely-used approximate riemann solver is Roe's, which is described at length in [[2]](#ref2) and [[3]](#ref3). In maths, the Roe's approximate riemann solver is a function mapping the left and right states of a interface into its flux. In a transient problem, the time derivative is a integral of fluxes around a volume, and a corresponding steady problem is thus making time derivative zero. As this program currently only solve the Euler equations of gas dynamics, no other flux parts than the hyperbolic parts represented by Roe's scheme are included.
+
+&emsp;The discussions above only discretize the differential operators (or equivalent integral operators) of space. Commonly speaking, an implicit time marching method is more robust and stable, especially when discontinuities emerge. A general approach to solve the nonlinear equations in a implicit time step is something like a Newton iteration, which demands to solve a linear system about the equations' first derivative. Apparently, it takes some hard work to derive the Jacobian matrix for the Roe's approximate riemann solver, and solving the non-symmetric global matrix also takes much coding. Therefore, only explicit time marching and a simple fixed-point iteration is applied in a implicit Euler time scheme. The fixed-point implicit method proves to be not very robust when shockwave emerges. More practical implicit solvers are yet to be implemented.
+
+&emsp;Namespace **RiemannSolver** contains class **RoeSet** describing the properties of fluid and template function **RoeFluxT()** which calculates the output for a Roe's solver for Euler equations of gas dynamics. This template function can be theoretically used in any integer dimension, but 3-D form is the primary concern.
+
+&emsp;Namespace **UGSolver** contains class **RoeUGsolver** which is derived class from **TetraMesh** (again, it should be a member but the code feels okay and there should be no difference in performance). The class **RoeUGsolver** is responsible for mesh management (as a **TetraMesh**), and is able to import and process problem data, conduct reconstruction and time-evolution, and output its result. The time derivative calculation follows the modifications in ALE description.
+
+### Coupling Solver <!--TODO-->
 
 ## Classes
 
